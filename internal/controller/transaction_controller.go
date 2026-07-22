@@ -41,15 +41,6 @@ func (c *TransactionController) GetAllTransactions(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, txns)
 }
 
-func (c *TransactionController) GetDashboardSummary(ctx *gin.Context) {
-	summary, err := c.service.GetDashboardSummary()
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	ctx.JSON(http.StatusOK, summary)
-}
-
 func (c *TransactionController) MarkAsPaid(ctx *gin.Context) {
 	idStr := ctx.Query("id")
 	id, err := strconv.Atoi(idStr)

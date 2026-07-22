@@ -34,12 +34,16 @@ func main() {
 
 	// Setup Service
 	txnService := service.NewTransactionService(txnRepo)
+	dashService := service.NewDashboardService(txnRepo)
+	intService := service.NewInterestService(txnRepo)
 
 	// Setup Controller
 	txnController := controller.NewTransactionController(txnService)
+	dashController := controller.NewDashboardController(dashService, intService)
+	intController := controller.NewInterestController(intService)
 
 	// Setup Router
-	r := router.SetupRouter(txnController)
+	r := router.SetupRouter(txnController, dashController, intController)
 
 	log.Info().Msg("Server starting on :8080...")
 	if err := r.Run(":8080"); err != nil {
