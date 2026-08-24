@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"finance_app/internal/models"
+	"fmt"
 	"strings"
 	"time"
 
@@ -19,6 +20,9 @@ type TransactionRepository interface {
 	GetByMobile(mobileNumber string) (*models.Transaction, error)
 	Search(surname, village, status *string) ([]*models.Transaction, error)
 	InitializeDB() error
+	SavePayment(payment *models.Payment) error
+	GetTotalRecovered() (float64, error)
+	GetInterestForMonth(year int, month int) (float64, error)
 }
 
 type sqliteTransactionRepository struct {
@@ -47,6 +51,19 @@ func (r *sqliteTransactionRepository) InitializeDB() error {
         created_at TEXT NOT NULL
     )`
 	_, err := r.db.Exec(query)
+	if err != nil {
+		return err
+	}
+
+	paymentQuery := `
+    CREATE TABLE IF NOT EXISTS payments(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mobile_number TEXT NOT NULL,
+        amount_paid REAL NOT NULL,
+        payment_date TEXT NOT NULL,
+        payment_type TEXT NOT NULL
+    )`
+	_, err = r.db.Exec(paymentQuery)
 	return err
 }
 
@@ -92,6 +109,28 @@ func (r *sqliteTransactionRepository) Delete(mobileNumber string) error {
 	query := `DELETE FROM transactions WHERE mobile_number = ?`
 	_, err := r.db.Exec(query, mobileNumber)
 	return err
+}
+
+func (r *sqliteTransactionRepository) SavePayment(payment *models.Payment) error {
+	query := `INSERT INTO payments(mobile_number, amount_paid, payment_date, payment_type) VALUES(?,?,?,?)`
+	_, err := r.db.Exec(query, payment.MobileNumber, payment.AmountPaid, payment.PaymentDate.Format(time.RFC3339), payment.PaymentType)
+	return err
+}
+
+func (r *sqliteTransactionRepository) GetTotalRecovered() (float64, error) {
+	var total float64
+	query := `SELECT SUM(amount_paid) FROM payments`
+	err := r.db.QueryRow(query).Scan(&total)
+	return total, err
+}
+
+func (r *sqliteTransactionRepository) GetInterestForMonth(year int, month int) (float64, error) {
+	var total float64
+	query := `SELECT SUM(amount_paid) FROM payments WHERE payment_type = 'INTEREST' AND strftime('%Y', payment_date) = ? AND strftime('%m', payment_date) = ?`
+	monthStr := fmt.Sprintf("%02d", month)
+	yearStr := fmt.Sprintf("%d", year)
+	err := r.db.QueryRow(query, yearStr, monthStr).Scan(&total)
+	return total, err
 }
 
 func (r *sqliteTransactionRepository) Exists(mobileNumber string) (bool, error) {

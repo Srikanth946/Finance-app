@@ -3,11 +3,20 @@
 A comprehensive personal finance management application built with Go, utilizing a clean architecture to manage transactions and provide dashboard summaries.
 
 ## 🚀 Features
-- Transaction management (Create, Read)
-- Mark transactions as paid
-- Dashboard summary for financial overview
-- Structured logging with `zerolog`
-- High-performance routing with `Gin Gonic` (In progress)
+- **Transaction Management**:
+  - Create new transactions
+  - Retrieve all transactions or a specific transaction by ID (mobile number)
+  - Mark transactions as paid
+  - Extend loans with new interest rates and compound durations
+- **Interest Calculation**:
+  - General interest calculation based on amount, rate, and duration
+  - Transaction-specific interest calculation
+- **Financial Dashboard**:
+  - Get a summary overview of finances
+- **Technical Stack**:
+  - High-performance routing with `Gin Gonic`
+  - Structured logging with `zerolog`
+  - Lightweight data storage with `SQLite`
 
 
 ## 📂 Project Structure
@@ -18,6 +27,8 @@ Finance-app/
 │       └── main.go               # Entry point of the application
 ├── internal/
 │   ├── controller/               # Request handling and validation
+│   │   ├── dashboard_controller.go
+│   │   ├── interest_controller.go
 │   │   └── transaction_controller.go
 │   ├── models/                   # Data structures and entities
 │   │   └── transaction.go
@@ -26,6 +37,8 @@ Finance-app/
 │   ├── router/                   # API route definitions
 │   │   └── router.go
 │   └── service/                  # Business logic layer
+│       ├── dashboard_service.go
+│       ├── intrest_service.go
 │       └── transaction_service.go
 ├── go.mod                        # Go module definitions
 ├── go.sum                        # Dependency checksums

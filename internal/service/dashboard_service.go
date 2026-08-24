@@ -3,6 +3,8 @@ package service
 import (
 	"finance_app/internal/models"
 	"finance_app/internal/repository"
+	"math"
+	"strings"
 	"sync"
 	"time"
 )
@@ -47,68 +49,62 @@ func (s *DashboardServiceHandler) GetDashboardSummary() (*models.DashboardSummar
 		return nil, err
 	}
 
-	var activeCounter, paidCounter int
-	var outstandingPrincipal, outstandingAmount float64
+	var activeUsers, paidUsers int
+	var totalGiven, totalRecovered float64
+	var previousMonthInterest float64
+	var newUsersLastMonth int
+	var recoveredLastMonth float64
+	var projectedInterestLastMonth float64
 
-	// Map to track monthly totals: "YYYY-MM" -> *MonthlyAnalysis
-	monthlyMap := make(map[string]*models.MonthlyAnalysis)
+	now := time.Now()
+	firstDayOfCurrentMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	firstDayOfLastMonth := firstDayOfCurrentMonth.AddDate(0, -1, 0)
+	lastDayOfLastMonth := firstDayOfCurrentMonth.AddDate(0, 0, -1)
+
+	// Get actual recovered amount from repository
+	totalRecovered, _ = s.repo.GetTotalRecovered()
 
 	for _, txn := range txns {
-		if txn.Status == "ACTIVE" {
-			activeCounter++
-			outstandingPrincipal += txn.Amount
+		totalGiven += txn.Amount
 
-			summary, err := s.interestSvc.CalculateInterest(txn)
-			if err != nil {
-				return nil, err
+		// 1. Count New Users in last month
+		if txn.CreatedAt.After(firstDayOfLastMonth) && txn.CreatedAt.Before(lastDayOfLastMonth) {
+			newUsersLastMonth++
+		}
+
+		// FIXED: Case-insensitive status check
+		if strings.ToUpper(txn.Status) == "ACTIVE" {
+			activeUsers++
+
+			summaryToday, err := s.interestSvc.CalculateInterest(txn)
+			if err == nil && summaryToday.MonthsElapsed > 0 {
+				// Approximation for the global report
+				monthlyGrowth := (summaryToday.CurrentAmount - txn.Amount) / float64(summaryToday.MonthsElapsed)
+				previousMonthInterest += monthlyGrowth
+				projectedInterestLastMonth += monthlyGrowth
 			}
-			outstandingAmount += summary.CurrentAmount
 		} else {
-			paidCounter++
-		}
-
-		// Analysis for all customers (Company Level)
-		// We use the StartDate to determine when the loan was given
-		if txn.StartDate != "" {
-			date, err := time.Parse("2006-01-02", txn.StartDate)
-			if err == nil {
-				monthKey := date.Format("2006-01")
-				if _, ok := monthlyMap[monthKey]; !ok {
-					monthlyMap[monthKey] = &models.MonthlyAnalysis{Month: monthKey}
-				}
-				monthlyMap[monthKey].AmountGiven += txn.Amount
-			}
-		}
-
-		// For AmountReceived and InterestEarned, we'd normally track a separate
-		// "Payments" table. Since we currently have a simple "PAID" status,
-		// we'll calculate it based on when the loan was marked paid.
-		if txn.Status == "PAID" {
-			// In a real pro app, we'd have a Payments table with dates.
-			// For this version, we'll use the record's creation or metadata if available.
-			// As a simplification for this MVP, we assume payment happens near end of loan.
-			// (Ideally, you'd add a 'PaymentDate' field to the model)
+			paidUsers++
 		}
 	}
 
-	// Convert map to slice
-	var analysis []models.MonthlyAnalysis
-	for _, v := range monthlyMap {
-		analysis = append(analysis, *v)
-	}
+	// Recovered last month - utilizing the repository's month filter
+	recoveredLastMonth, _ = s.repo.GetInterestForMonth(firstDayOfLastMonth.Year(), int(firstDayOfLastMonth.Month()))
 
 	summary := &models.DashboardSummary{
-		TotalTransactions:  len(txns),
-		ActiveTransactions: activeCounter,
-		PaidTransactions:   paidCounter,
-		TotalPrincipal:     outstandingPrincipal,
-		TotalOutstanding:   outstandingAmount,
-		MonthlyAnalysis:    analysis,
-		LastUpdated:        time.Now(),
+		TotalUsers:            len(txns),
+		ActiveUsers:           activeUsers,
+		PaidUsers:             paidUsers,
+		TotalAmountGiven:      totalGiven,
+		TotalAmountRecovered:  totalRecovered,
+		PreviousMonthInterest: math.Round(previousMonthInterest*100) / 100,
+		NewUsersLastMonth:     newUsersLastMonth,
+		RecoveredLastMonth:    math.Round(recoveredLastMonth*100) / 100,
+		ProjectedInterest:     math.Round(projectedInterestLastMonth*100) / 100,
+		LastUpdated:           now,
 	}
 
 	s.cache = summary
-	s.cacheTime = time.Now()
-
+	s.cacheTime = now
 	return summary, nil
 }

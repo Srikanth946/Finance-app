@@ -39,30 +39,31 @@ func (s *InterestServiceHandler) CalculateInterest(txn *models.Transaction) (*mo
 		return nil, err
 	}
 
-	// Calculate months elapsed
-	years := calculationEndDate.Year() - startDate.Year()
-	months := int(calculationEndDate.Month()) - int(startDate.Month())
-	monthsElapsed := years*12 + months
-
-	if calculationEndDate.Day() < startDate.Day() {
-		monthsElapsed--
+	// Calculate exact days elapsed for pro-rata precision
+	daysElapsed := int(calculationEndDate.Sub(startDate).Hours() / 24)
+	if daysElapsed < 0 {
+		daysElapsed = 0
 	}
+	monthsElapsed := daysElapsed / 30 // Approximate months for the summary report
 
 	principal := txn.Amount
-	monthlyRate := txn.InterestRate / 100 / 12
-	remainingMonths := monthsElapsed
+	dailyRate := txn.InterestRate / 100 / 365
+	remainingDays := daysElapsed
 	totalInterest := 0.0
 
-	for remainingMonths > 0 {
-		monthsToCalculate := remainingMonths
-		if monthsToCalculate > txn.CompoundDurationMonths {
-			monthsToCalculate = txn.CompoundDurationMonths
+	// Compound based on CompoundDurationMonths (approx 30 days per month)
+	compoundDays := txn.CompoundDurationMonths * 30
+
+	for remainingDays > 0 {
+		daysToCalculate := remainingDays
+		if daysToCalculate > compoundDays {
+			daysToCalculate = compoundDays
 		}
 
-		interest := principal * monthlyRate * float64(monthsToCalculate)
+		interest := principal * dailyRate * float64(daysToCalculate)
 		totalInterest += interest
 		principal += interest
-		remainingMonths -= monthsToCalculate
+		remainingDays -= daysToCalculate
 	}
 
 	return &models.InterestSummary{
