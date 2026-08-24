@@ -8,16 +8,15 @@ import (
 )
 
 type DashboardController struct {
-	service     service.DashboardService
-	interestSvc service.InterestService
+	service service.DashboardService
 }
 
-func NewDashboardController(s service.DashboardService, i service.InterestService) *DashboardController {
-	return &DashboardController{service: s, interestSvc: i}
+func NewDashboardController(s service.DashboardService) *DashboardController {
+	return &DashboardController{service: s}
 }
 
 func (c *DashboardController) GetSummary(ctx *gin.Context) {
-	summary, err := c.service.GetDashboardSummary(c.interestSvc)
+	summary, err := c.service.GetDashboardSummary()
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

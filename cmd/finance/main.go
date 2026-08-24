@@ -6,21 +6,23 @@ import (
 	"finance_app/internal/repository"
 	"finance_app/internal/router"
 	"finance_app/internal/service"
+	"os"
+	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	_ "modernc.org/sqlite"
 )
 
 func main() {
 	// Configure Global Logger
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.With().
+	zerolog.TimeFieldFormat = time.RFC3339
+	log := zerolog.New(os.Stdout).With().Timestamp().Logger()
+	log = log.With().
 		Str("app", "finance_app").
 		Str("env", "development").Logger()
 
 	// Initialize Database
-	db, err := sql.Open("sqlite3", "finance.db")
+	db, err := sql.Open("sqlite", "finance.db")
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to open database")
 	}
@@ -33,13 +35,13 @@ func main() {
 	}
 
 	// Setup Service
-	txnService := service.NewTransactionService(txnRepo)
-	dashService := service.NewDashboardService(txnRepo)
 	intService := service.NewInterestService(txnRepo)
+	txnService := service.NewTransactionService(txnRepo, intService)
+	dashService := service.NewDashboardService(txnRepo, intService)
 
 	// Setup Controller
 	txnController := controller.NewTransactionController(txnService)
-	dashController := controller.NewDashboardController(dashService, intService)
+	dashController := controller.NewDashboardController(dashService)
 	intController := controller.NewInterestController(intService)
 
 	// Setup Router

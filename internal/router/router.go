@@ -14,15 +14,23 @@ func SetupRouter(
 	r := gin.Default()
 
 	// Transaction Routes
-	r.POST("/transactions", txnController.CreateTransaction)
-	r.GET("/transactions", txnController.GetAllTransactions)
-	r.POST("/transactions/paid", txnController.MarkAsPaid)
+	if txnController != nil {
+		r.POST("/transactions", txnController.CreateTransaction)
+		r.GET("/transactions", txnController.GetAllTransactions)
+		r.GET("/transactions/:id", txnController.GetTransaction)
+		r.PUT("/transactions/:id/paid", txnController.MarkAsPaid)
+		r.PUT("/transactions/:id/extend", txnController.ExtendLoan)
+	}
 
 	// Dashboard Routes
-	r.GET("/dashboard", dashController.GetSummary)
+	if dashController != nil {
+		r.GET("/dashboard", dashController.GetSummary)
+	}
 
 	// Interest Routes
-	r.POST("/interest/calculate", intController.Calculate)
+	if intController != nil {
+		r.POST("/interest/calculate", intController.Calculate)
+	}
 
 	return r
 }

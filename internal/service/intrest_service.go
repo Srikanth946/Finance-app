@@ -9,6 +9,7 @@ import (
 
 type InterestService interface {
 	CalculateInterest(txn *models.Transaction) (*models.InterestSummary, error)
+	CalculateGeneralInterest(amount float64, rate float64, months int, compoundDuration int) (*models.InterestSummary, error)
 }
 
 type InterestServiceHandler struct {
@@ -65,10 +66,35 @@ func (s *InterestServiceHandler) CalculateInterest(txn *models.Transaction) (*mo
 	}
 
 	return &models.InterestSummary{
-		OriginalAmount:     txn.Amount,
-		CurrentAmount:      math.Round(principal*100) / 100,
-		MonthsElapsed:      monthsElapsed,
-		TotalInterest:      math.Round(totalInterest*100) / 100,
-		CalculationEndDate: calculationEndDate.Format("2006-01-02"),
+		OriginalAmount: txn.Amount,
+		CurrentAmount:  math.Round(principal*100) / 100,
+		MonthsElapsed:  monthsElapsed,
+		TotalInterest:  math.Round(totalInterest*100) / 100,
+	}, nil
+}
+
+func (s *InterestServiceHandler) CalculateGeneralInterest(amount float64, rate float64, months int, compoundDuration int) (*models.InterestSummary, error) {
+	principal := amount
+	monthlyRate := rate / 100 / 12
+	remainingMonths := months
+	totalInterest := 0.0
+
+	for remainingMonths > 0 {
+		monthsToCalculate := remainingMonths
+		if monthsToCalculate > compoundDuration {
+			monthsToCalculate = compoundDuration
+		}
+
+		interest := principal * monthlyRate * float64(monthsToCalculate)
+		totalInterest += interest
+		principal += interest
+		remainingMonths -= monthsToCalculate
+	}
+
+	return &models.InterestSummary{
+		OriginalAmount: amount,
+		CurrentAmount:  math.Round(principal*100) / 100,
+		MonthsElapsed:  months,
+		TotalInterest:  math.Round(totalInterest*100) / 100,
 	}, nil
 }

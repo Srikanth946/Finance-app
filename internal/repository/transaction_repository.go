@@ -6,14 +6,17 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 type TransactionRepository interface {
 	Save(txn *models.Transaction) error
-	UpdateStatus(id int, status string) error
+	UpdateStatus(mobileNumber string, status string) error
+	UpdateAmount(mobileNumber string, amount float64) error
+	Delete(mobileNumber string) error
+	Exists(mobileNumber string) (bool, error)
 	GetAll() ([]*models.Transaction, error)
-	GetByID(id int) (*models.Transaction, error)
+	GetByMobile(mobileNumber string) (*models.Transaction, error)
 	Search(surname, village, status *string) ([]*models.Transaction, error)
 	InitializeDB() error
 }
@@ -29,7 +32,7 @@ func NewTransactionRepository(db *sql.DB) TransactionRepository {
 func (r *sqliteTransactionRepository) InitializeDB() error {
 	query := `
     CREATE TABLE IF NOT EXISTS transactions(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mobile_number TEXT PRIMARY KEY,
         surname TEXT NOT NULL,
         lastname TEXT NOT NULL,
         village TEXT NOT NULL,
@@ -50,15 +53,16 @@ func (r *sqliteTransactionRepository) InitializeDB() error {
 func (r *sqliteTransactionRepository) Save(txn *models.Transaction) error {
 	query := `
     INSERT INTO transactions(
-        surname, lastname, village, amount, interest_rate, 
+        surname, lastname, village, mobile_number, amount, interest_rate, 
         start_date, end_date, compound_duration_months, 
         transaction_type, notes, status, created_at
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`
 
 	_, err := r.db.Exec(query,
 		strings.ToLower(txn.Surname),
 		strings.ToLower(txn.LastName),
 		txn.Village,
+		txn.MobileNumber,
 		txn.Amount,
 		txn.InterestRate,
 		txn.StartDate,
@@ -72,14 +76,33 @@ func (r *sqliteTransactionRepository) Save(txn *models.Transaction) error {
 	return err
 }
 
-func (r *sqliteTransactionRepository) UpdateStatus(id int, status string) error {
-	query := `UPDATE transactions SET status = ? WHERE id = ?`
-	_, err := r.db.Exec(query, strings.ToLower(status), id)
+func (r *sqliteTransactionRepository) UpdateStatus(mobileNumber string, status string) error {
+	query := `UPDATE transactions SET status = ? WHERE mobile_number = ?`
+	_, err := r.db.Exec(query, strings.ToLower(status), mobileNumber)
 	return err
 }
 
+func (r *sqliteTransactionRepository) UpdateAmount(mobileNumber string, amount float64) error {
+	query := `UPDATE transactions SET amount = ? WHERE mobile_number = ?`
+	_, err := r.db.Exec(query, amount, mobileNumber)
+	return err
+}
+
+func (r *sqliteTransactionRepository) Delete(mobileNumber string) error {
+	query := `DELETE FROM transactions WHERE mobile_number = ?`
+	_, err := r.db.Exec(query, mobileNumber)
+	return err
+}
+
+func (r *sqliteTransactionRepository) Exists(mobileNumber string) (bool, error) {
+	var exists bool
+	query := `SELECT EXISTS(SELECT 1 FROM transactions WHERE mobile_number = ? AND status = 'active')`
+	err := r.db.QueryRow(query, mobileNumber).Scan(&exists)
+	return exists, err
+}
+
 func (r *sqliteTransactionRepository) GetAll() ([]*models.Transaction, error) {
-	query := `SELECT * FROM transactions`
+	query := `SELECT mobile_number, surname, lastname, village, amount, interest_rate, start_date, end_date, compound_duration_months, transaction_type, notes, status, created_at FROM transactions`
 	rows, err := r.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -89,50 +112,46 @@ func (r *sqliteTransactionRepository) GetAll() ([]*models.Transaction, error) {
 	var txns []*models.Transaction
 	for rows.Next() {
 		txn := &models.Transaction{}
-		var createdAtStr string
-		err := rows.Scan(&txn.ID, &txn.Surname, &txn.LastName, &txn.Village, &txn.Amount,
-			&txn.InterestRate, &txn.StartDate, &txn.EndDate, &txn.CompoundDurationMonths,
-			&txn.TransactionType, &txn.Notes, &txn.Status, &createdAtStr)
+		var createdAt string
+		err := rows.Scan(&txn.MobileNumber, &txn.Surname, &txn.LastName, &txn.Village, &txn.Amount, &txn.InterestRate, &txn.StartDate, &txn.EndDate, &txn.CompoundDurationMonths, &txn.TransactionType, &txn.Notes, &txn.Status, &createdAt)
 		if err != nil {
 			return nil, err
 		}
-		txn.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
+		txn.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 		txns = append(txns, txn)
 	}
 	return txns, nil
 }
 
-func (r *sqliteTransactionRepository) GetByID(id int) (*models.Transaction, error) {
-	query := `SELECT * FROM transactions WHERE id = ?`
-	row := r.db.QueryRow(query, id)
+func (r *sqliteTransactionRepository) GetByMobile(mobileNumber string) (*models.Transaction, error) {
+	query := `SELECT mobile_number, surname, lastname, village, amount, interest_rate, start_date, end_date, compound_duration_months, transaction_type, notes, status, created_at FROM transactions WHERE mobile_number = ?`
+	row := r.db.QueryRow(query, mobileNumber)
 
 	txn := &models.Transaction{}
-	var createdAtStr string
-	err := row.Scan(&txn.ID, &txn.Surname, &txn.LastName, &txn.Village, &txn.Amount,
-		&txn.InterestRate, &txn.StartDate, &txn.EndDate, &txn.CompoundDurationMonths,
-		&txn.TransactionType, &txn.Notes, &txn.Status, &createdAtStr)
+	var createdAt string
+	err := row.Scan(&txn.MobileNumber, &txn.Surname, &txn.LastName, &txn.Village, &txn.Amount, &txn.InterestRate, &txn.StartDate, &txn.EndDate, &txn.CompoundDurationMonths, &txn.TransactionType, &txn.Notes, &txn.Status, &createdAt)
 	if err != nil {
 		return nil, err
 	}
-	txn.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
+	txn.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 	return txn, nil
 }
 
 func (r *sqliteTransactionRepository) Search(surname, village, status *string) ([]*models.Transaction, error) {
-	query := `SELECT * FROM transactions WHERE 1=1`
+	query := `SELECT mobile_number, surname, lastname, village, amount, interest_rate, start_date, end_date, compound_duration_months, transaction_type, notes, status, created_at FROM transactions WHERE 1=1`
 	var args []interface{}
 
 	if surname != nil {
-		query += ` AND surname = ?`
-		args = append(args, strings.ToLower(*surname))
+		query += ` AND surname LIKE ?`
+		args = append(args, "%"+*surname+"%")
 	}
 	if village != nil {
-		query += ` AND village = ?`
-		args = append(args, *village)
+		query += ` AND village LIKE ?`
+		args = append(args, "%"+*village+"%")
 	}
 	if status != nil {
 		query += ` AND status = ?`
-		args = append(args, strings.ToLower(*status))
+		args = append(args, *status)
 	}
 
 	rows, err := r.db.Query(query, args...)
@@ -144,14 +163,12 @@ func (r *sqliteTransactionRepository) Search(surname, village, status *string) (
 	var txns []*models.Transaction
 	for rows.Next() {
 		txn := &models.Transaction{}
-		var createdAtStr string
-		err := rows.Scan(&txn.ID, &txn.Surname, &txn.LastName, &txn.Village, &txn.Amount,
-			&txn.InterestRate, &txn.StartDate, &txn.EndDate, &txn.CompoundDurationMonths,
-			&txn.TransactionType, &txn.Notes, &txn.Status, &createdAtStr)
+		var createdAt string
+		err := rows.Scan(&txn.MobileNumber, &txn.Surname, &txn.LastName, &txn.Village, &txn.Amount, &txn.InterestRate, &txn.StartDate, &txn.EndDate, &txn.CompoundDurationMonths, &txn.TransactionType, &txn.Notes, &txn.Status, &createdAt)
 		if err != nil {
 			return nil, err
 		}
-		txn.CreatedAt, _ = time.Parse(time.RFC3339, createdAtStr)
+		txn.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
 		txns = append(txns, txn)
 	}
 	return txns, nil
