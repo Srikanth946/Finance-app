@@ -1,0 +1,222 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Finance App API",
+    "description": "A specialized API for managing community loans. Business Rule: Each user (identified by mobile number) can only have ONE active loan at a time. If a loan is marked as paid, it is deleted from the system to allow the user to take a new loan in the future.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/transactions": {
+      "get": {
+        "summary": "Get all transactions",
+        "description": "Retrieves a list of all loans in the system.",
+        "responses": {
+          "200": {
+            "description": "A list of transactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Transaction" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new loan",
+        "description": "Creates a new loan record. Note: The system enforces a strict 'One Loan Per User' rule. If the provided mobile number already has an active loan, this request will fail.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Transaction" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Loan created successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Transaction" }
+              }
+            }
+          },
+          "400": { "description": "Invalid input or loan already exists" }
+        }
+      }
+    },
+    "/transactions/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The mobile number of the user",
+          "schema": { "type": "string" }
+        }
+      ],
+      "get": {
+        "summary": "Get loan with real-time interest",
+        "description": "Returns the original loan details and the current calculated balance including interest.",
+        "responses": {
+          "200": {
+            "description": "Loan details and interest summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "loan_details": { "$ref": "#/components/schemas/Transaction" },
+                    "current_interest": { "$ref": "#/components/schemas/InterestSummary" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Loan not found" }
+        }
+      },
+      "put": {
+        "summary": "Extend an existing loan",
+        "description": "Calculates the current balance (including accumulated interest) and starts a new loan period. This effectively replaces the old loan with a new one using the current balance as the new principal. Requires new interest rate and compounding terms.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "interest_rate": { "type": "number", "example": 15.0 },
+                  "compound_duration_months": { "type": "integer", "example": 12 }
+                },
+                "required": ["interest_rate", "compound_duration_months"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Loan extended successfully" },
+          "400": { "description": "Invalid input" }
+        }
+      }
+    },
+    "/transactions/{id}/paid": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The mobile number of the user",
+          "schema": { "type": "string" }
+        }
+      ],
+      "put": {
+        "summary": "Mark loan as paid",
+        "description": "Closes the loan. Once marked as paid, the record is deleted from the active database, which allows the user (mobile number) to be eligible for a new loan in the future.",
+        "responses": {
+          "200": { "description": "Loan marked as paid and cleared" }
+        }
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "summary": "Get admin dashboard summary",
+        "description": "Returns global financial metrics including total given, recovered amounts, and monthly interest projections.",
+        "responses": {
+          "200": {
+            "description": "Dashboard summary",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DashboardSummary" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/interest/calculate": {
+      "post": {
+        "summary": "Calculate interest (Utility)",
+        "description": "Allows calculation of interest for any amount and rate without needing a transaction record.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": { "type": "number" },
+                  "interest_rate": { "type": "number" },
+                  "months": { "type": "integer" },
+                  "compound_duration_months": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Interest calculation result",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InterestSummary" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "mobile_number": { "type": "string" },
+          "surname": { "type": "string" },
+          "lastname": { "type": "string" },
+          "village": { "type": "string" },
+          "amount": { "type": "number" },
+          "interest_rate": { "type": "number" },
+          "start_date": { "type": "string", "format": "date" },
+          "end_date": { "type": "string", "format": "date" },
+          "compound_duration_months": { "type": "integer" },
+          "transaction_type": { "type": "string" },
+          "status": { "type": "string" }
+        }
+      },
+      "InterestSummary": {
+        "type": "object",
+        "properties": {
+          "original_amount": { "type": "number" },
+          "current_amount": { "type": "number" },
+          "months_elapsed": { "type": "integer" },
+          "total_interest": { "type": "number" }
+        }
+      },
+      "DashboardSummary": {
+        "type": "object",
+        "properties": {
+          "total_users": { "type": "integer" },
+          "active_users": { "type": "integer" },
+          "paid_users": { "type": "integer" },
+          "total_amount_given": { "type": "number" },
+          "total_amount_recovered": { "type": "number" },
+          "previous_month_interest": { "type": "number" },
+          "new_users_last_month": { "type": "integer" },
+          "recovered_last_month": { "type": "number" },
+          "projected_interest_last_month": { "type": "number" },
+          "last_updated": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}
